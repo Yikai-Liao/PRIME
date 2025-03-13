@@ -25,6 +25,7 @@
 
 # 🎉News
 
+- **[2025/03/12]** PRIME has been integrated into veRL main branch! Try [here](https://github.com/volcengine/verl/tree/main/recipe/prime).
 - **[2025/02/04]** Released our Paper on arXiv. See [here](https://arxiv.org/abs/2502.01456).
 - **[2025/01/06]** We release the training/eval/data_preprocessing code. Enjoy! We are working on the paper and will release it very soon.
 - **[2025/01/02]** We present **PRIME** (Process Reinforcement through IMplicit REwards), an open-source solution for online RL with process rewards, to advance reasoning abilities of language models beyond imitation or distillation. All models and data released through [HuggingFace](https://huggingface.co/PRIME-RL).
