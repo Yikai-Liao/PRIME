@@ -2,7 +2,7 @@
 
 # Process Reinforcement Through Implicit Rewards
 
-[![arXiv](https://img.shields.io/badge/arXiv-2502.01456-ff0000.svg?style=for-the-badge)](https://arxiv.org/abs/2502.01456)  [![Github](https://img.shields.io/badge/PRIME-000000?style=for-the-badge&logo=github&logoColor=000&logoColor=white)](https://github.com/PRIME-RL/PRIME)  [![Notion](https://img.shields.io/badge/Notion-%23000000.svg?style=for-the-badge&logo=notion&logoColor=white)](https://curvy-check-498.notion.site/Process-Reinforcement-through-Implicit-Rewards-15f4fcb9c42180f1b498cc9b2eaf896f)  [![Hugging Face Collection](https://img.shields.io/badge/PRIME_Collection-fcd022?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/PRIME-RL)
+[![Paper](https://img.shields.io/badge/paper-A42C25?style=for-the-badge&logo=arxiv&logoColor=white)](https://arxiv.org/abs/2502.01456)  [![Github](https://img.shields.io/badge/PRIME-000000?style=for-the-badge&logo=github&logoColor=000&logoColor=white)](https://github.com/PRIME-RL/PRIME)  [![Notion](https://img.shields.io/badge/Notion-%23000000.svg?style=for-the-badge&logo=notion&logoColor=white)](https://curvy-check-498.notion.site/Process-Reinforcement-through-Implicit-Rewards-15f4fcb9c42180f1b498cc9b2eaf896f)  [![Hugging Face Collection](https://img.shields.io/badge/PRIME_Collection-fcd022?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/PRIME-RL)
 
 <div align="center" style="font-family: Arial, sans-serif;">
   <p>
