@@ -49,11 +49,13 @@ def generate_sample_batch(question_list):
         gpu_memory_utilization=0.9,
         max_model_len=32768,
         max_num_seqs=32,
+        seed=args.seed,
     )
     sampling_params = SamplingParams(max_tokens=32768,
-                                    temperature=0.8,
+                                    temperature=args.temperature,
                                     n=args.num_samples_per_task,
-                                    stop=STOP_WORDS)
+                                    stop=STOP_WORDS,
+                                    seed=args.seed)
     print(f"Generating {len(question_list)} samples with {args.num_samples_per_task} completions each...")
     try:
         outputs = llm.generate(question_list, sampling_params, use_tqdm=True)
@@ -152,10 +154,19 @@ if __name__ == "__main__":
     parser.add_argument("--input_data", type=str, default="")
     parser.add_argument("--save_dir", type=str, default="")
     parser.add_argument("--num-samples-per-task", type=int, default=10)
+    parser.add_argument("--temperature", type=float, default=0.8)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--test", action="store_true", help="Test mode: evaluate only first 10 samples")
     args = parser.parse_args()
     
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     dataset = pd.read_json(args.input_data, lines=False)
+    
+    # Apply test mode limitation
+    if args.test:
+        dataset = dataset.head(10)
+        print(f"Test mode: Evaluating only first {len(dataset)} problems")
+    
     dataset["signature"] = dataset.apply(lambda row: make_signature(row["code"]), axis=1)
     for signature in dataset["signature"]:
         STOP_WORDS.append("\n\nprint(" + signature.split("(")[0].strip())

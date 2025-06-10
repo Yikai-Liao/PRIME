@@ -49,11 +49,13 @@ def generate_sample_batch(question_list):
         dtype='bfloat16',
         enforce_eager=True,
         skip_tokenizer_init=False,
+        seed=args.seed,
     )
     sampling_params = SamplingParams(max_tokens=32768,
                                      temperature=args.temperature,
                                      n=args.num_samples_per_task,
-                                     stop=[], )
+                                     stop=[], 
+                                     seed=args.seed)
     outputs = llm.generate(question_list, sampling_params, use_tqdm=True)
     completions = []
     for output in outputs:
@@ -168,6 +170,12 @@ def make_conv_hf(question, tokenizer):
 
 def run(args, max=-1):
     all_problems = read_jsonl_file(os.path.join(args.data_dir, "aimo-validation-amc.jsonl"))
+    
+    # Apply test mode limitation
+    if args.test:
+        all_problems = all_problems[:10]
+        print(f"Test mode: Evaluating only first {len(all_problems)} problems")
+    
     print("reading problems done!")
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     completions = generate_sample_batch(
@@ -291,5 +299,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="")
     parser.add_argument("--num-samples-per-task", type=int, default=10)
     parser.add_argument("--temperature", type=float, default=0.8)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--test", action="store_true", help="Test mode: evaluate only first 10 samples")
     args = parser.parse_args()
     run(args)

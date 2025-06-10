@@ -20,9 +20,17 @@ parser.add_argument("--save_dir", type=str)
 parser.add_argument("--input_data", type=str)
 parser.add_argument("--num-samples-per-task", type=int, default=10)
 parser.add_argument("--temperature", type=float, default=0.8)
+parser.add_argument("--seed", type=int, default=42)
+parser.add_argument("--test", action="store_true", help="Test mode: evaluate only first 10 samples")
 args = parser.parse_args()
 
 problems = pd.read_json(args.input_data, lines=True)
+
+# Apply test mode limitation
+if args.test:
+    problems = problems.head(10)
+    print(f"Test mode: Evaluating only first {len(problems)} problems")
+
 STOP_WORDS =["\nassert", "assert"]
 
 from vllm import LLM, SamplingParams
@@ -55,11 +63,13 @@ def generate_sample_batch(question_list):
         trust_remote_code=True,
         tensor_parallel_size=torch.cuda.device_count(),
         gpu_memory_utilization=0.80,
+        seed=args.seed,
     )
     sampling_params = SamplingParams(max_tokens=32768,
                                     temperature=args.temperature,
                                     n=args.num_samples_per_task,
-                                    stop=["<|eot_id|>"],)
+                                    stop=["<|eot_id|>"],
+                                    seed=args.seed)
     
     outputs = llm.generate(question_list, sampling_params, use_tqdm=True)
     

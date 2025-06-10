@@ -21,9 +21,18 @@ parser.add_argument("--save_dir", type=str)
 parser.add_argument("--data_dir", type=str)
 parser.add_argument("--num-samples-per-task", type=int, default=10)
 parser.add_argument("--temperature", type=float, default=0.0)
+parser.add_argument("--seed", type=int, default=42)
+parser.add_argument("--test", action="store_true", help="Test mode: evaluate only first 10 samples")
 args = parser.parse_args()
 data_path = os.path.join(args.data_dir, "HumanEval.jsonl.gz")
 problems = read_problems(data_path)
+
+# Apply test mode limitation
+if args.test:
+    problem_ids = sorted(problems.keys())[:10]
+    problems = {pid: problems[pid] for pid in problem_ids}
+    print(f"Test mode: Evaluating only first {len(problems)} problems")
+
 STOP_WORDS =["\nassert", "assert"]
 
 from vllm import LLM, SamplingParams
@@ -87,13 +96,15 @@ def generate_sample_batch(question_list):
         trust_remote_code=True,
         # tensor_parallel_size=torch.cuda.device_count(),
         gpu_memory_utilization=0.90,
-        # enforce_eager=True,
+        enforce_eager=True,
+        seed=args.seed,
         
     )
     sampling_params = SamplingParams(max_tokens=32768,
                                     temperature=args.temperature,
                                     n=args.num_samples_per_task,
-                                    stop=["<|eot_id|>","<|im_end|>"],)
+                                    stop=["<|eot_id|>","<|im_end|>"],
+                                    seed=args.seed)
     
     outputs = llm.generate(question_list, sampling_params, use_tqdm=True)
 
@@ -139,7 +150,25 @@ if not os.path.exists(os.path.join(args.save_dir)):
 write_jsonl(output_filepath, samples)
 
 k_values = list(range(1, args.num_samples_per_task + 1))  # k from 1 to n
-score = evaluate_functional_correctness(sample_file=output_filepath, k=k_values)
+# In test mode, pass the filtered problems to evaluation
+if args.test:
+    # Create a temporary problem file with only the test problems
+    import tempfile
+    import gzip
+    import json
+    
+    temp_problems_file = tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl.gz', delete=False)
+    with gzip.open(temp_problems_file.name, 'wt') as f:
+        for problem_id, problem in problems.items():
+            f.write(json.dumps(problem) + '\n')
+    
+    score = evaluate_functional_correctness(sample_file=output_filepath, k=k_values, problem_file=temp_problems_file.name)
+    
+    # Clean up temp file
+    import os
+    os.unlink(temp_problems_file.name)
+else:
+    score = evaluate_functional_correctness(sample_file=output_filepath, k=k_values)
 print(score)
 
 # Save detailed results
