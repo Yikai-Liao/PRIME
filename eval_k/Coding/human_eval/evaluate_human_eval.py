@@ -90,7 +90,7 @@ def generate_sample_batch(question_list):
         # enforce_eager=True,
         
     )
-    sampling_params = SamplingParams(max_tokens=4096,
+    sampling_params = SamplingParams(max_tokens=32768,
                                     temperature=args.temperature,
                                     n=args.num_samples_per_task,
                                     stop=["<|eot_id|>","<|im_end|>"],)
@@ -138,7 +138,7 @@ if not os.path.exists(os.path.join(args.save_dir)):
     os.mkdir(os.path.join(args.save_dir))
 write_jsonl(output_filepath, samples)
 
-k_values = list(range(1, min(args.num_samples_per_task + 1, 11)))  # k from 1 to min(n, 10)
+k_values = list(range(1, args.num_samples_per_task + 1))  # k from 1 to n
 score = evaluate_functional_correctness(sample_file=output_filepath, k=k_values)
 print(score)
 

@@ -44,7 +44,7 @@ def generate_sample_batch(question_list):
         tensor_parallel_size=torch.cuda.device_count(),
         gpu_memory_utilization=0.90,
     )
-    sampling_params = SamplingParams(max_tokens=8192,
+    sampling_params = SamplingParams(max_tokens=32768,
                                     temperature=args.temperature,
                                     n=args.num_samples_per_task,
                                     stop=["\n###\nProblem: ", "<|eot_id|>"],)
@@ -337,7 +337,7 @@ def run(args, max=-1):
         }
         
         # Calculate and save pass@k metrics
-        k_values = list(range(1, min(args.num_samples_per_task + 1, 11)))
+        k_values = list(range(1, args.num_samples_per_task + 1))
         pass_at_k_results = {}
         
         for k in k_values:

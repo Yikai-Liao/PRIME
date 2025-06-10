@@ -1,5 +1,5 @@
 #!/bin/bash
-source /environment/miniconda3/etc/profile.d/conda.sh   # set to your path
+source /home/yikai003/condaforge3/etc/profile.d/conda.sh   # set to your path
 MODEL_CKPT=$1
 NUM_SAMPLES=${2:-10}  # Number of samples per task (default: 10)
 TEMPERATURE=${3:-0.8}  # Temperature for sampling (default: 0.8)
@@ -17,9 +17,7 @@ echo
 
 # Specify the test data set
 # my_array=(mbpp leetcode math500 amc aime qwen livecodebench)
-my_array=(mbpp)
-
-
+my_array=(amc)
 
 
 if [[ " ${my_array[@]} " =~ " humaneval " ]]; then

@@ -50,10 +50,9 @@ def generate_sample_batch(question_list):
         enforce_eager=True,
         skip_tokenizer_init=False,
     )
-    sampling_params = SamplingParams(max_tokens=4096,
+    sampling_params = SamplingParams(max_tokens=32768,
                                      temperature=args.temperature,
                                      n=args.num_samples_per_task,
-                                     best_of=1,
                                      stop=[], )
     outputs = llm.generate(question_list, sampling_params, use_tqdm=True)
     completions = []
@@ -247,7 +246,7 @@ def run(args, max=-1):
     print(json.dumps(dic, indent=4))
     
     # Calculate pass@k metrics
-    k_values = list(range(1, min(args.num_samples_per_task + 1, 11)))
+    k_values = list(range(1, args.num_samples_per_task + 1))
     pass_at_k_results = {}
     
     for k in k_values:

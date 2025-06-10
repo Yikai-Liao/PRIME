@@ -47,10 +47,10 @@ def generate_sample_batch(question_list):
         trust_remote_code=True,
         tensor_parallel_size=torch.cuda.device_count(),
         gpu_memory_utilization=0.9,
-        max_model_len=8192*2,
+        max_model_len=32768,
         max_num_seqs=32,
     )
-    sampling_params = SamplingParams(max_tokens=8129,
+    sampling_params = SamplingParams(max_tokens=32768,
                                     temperature=0.8,
                                     n=args.num_samples_per_task,
                                     stop=STOP_WORDS)
@@ -216,7 +216,7 @@ if __name__ == "__main__":
             return 1.0
         return 1.0 - comb(n - c, k) / comb(n, k)
     
-    k_values = list(range(1, min(args.num_samples_per_task + 1, 11)))
+    k_values = list(range(1, args.num_samples_per_task + 1))
     pass_at_k_results = {}
     
     for k in k_values:
