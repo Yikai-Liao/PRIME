@@ -16,7 +16,9 @@ echo
 
 
 # Specify the test data set
-my_array=(mbpp leetcode math500 amc aime qwen livecodebench)
+# my_array=(mbpp leetcode math500 amc aime qwen livecodebench)
+my_array=(mbpp)
+
 
 
 
