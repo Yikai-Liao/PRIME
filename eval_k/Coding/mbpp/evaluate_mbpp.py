@@ -43,10 +43,10 @@ def generate_sample_batch(question_list):
         trust_remote_code=True,
         tensor_parallel_size=torch.cuda.device_count(),
         gpu_memory_utilization=0.9,
-        max_model_len=8192,  # Limit context length
+        max_model_len=8192*2,  # Limit context length
         max_num_seqs=32,
     )
-    sampling_params = SamplingParams(max_tokens=4096,  # Reduced from 4096
+    sampling_params = SamplingParams(max_tokens=8129,
                                     temperature=0.8,
                                     n=args.num_samples_per_task,
                                     stop=STOP_WORDS)
@@ -173,9 +173,19 @@ if __name__ == "__main__":
         STOP_WORDS.append("\n\nprint(" + signature.split("(")[0].strip())
     dataset["prompt"] = dataset.apply(lambda row: make_conv_hf(row["signature"], row["prompt"], row["test_list"], tokenizer), axis=1)
     # Use full dataset instead of just first 16 samples
-    # dataset = dataset[:16]  # Remove this limitation
-    completions,raw_completions = generate_sample_batch(dataset["prompt"].tolist())
-    
+    dataset = dataset[:64]  # Remove this limitation
+    # completions,raw_completions = generate_sample_batch(dataset["prompt"].tolist())
+    import pickle
+    # with open(os.path.join(args.save_dir, "completions.pkl"), "wb") as f:
+    #     pickle.dump(completions, f)
+    # with open(os.path.join(args.save_dir, "raw_completions.pkl"), "wb") as f:
+    #     pickle.dump(raw_completions, f)
+
+    # load from checkpoint
+    with open(os.path.join(args.save_dir, "completions.pkl"), "rb") as f:
+        completions = pickle.load(f)
+    with open(os.path.join(args.save_dir, "raw_completions.pkl"), "rb") as f:
+        raw_completions = pickle.load(f)
     # Create expanded dataset with multiple samples per task
     expanded_data = []
     for i, row in dataset.iterrows():
@@ -185,7 +195,6 @@ if __name__ == "__main__":
             new_row["task_id"] = f"{row['task_id']}_{j}" if 'task_id' in row else f"{i}_{j}"
             new_row["raw_completion"] = raw_completions[completion_idx]
             new_row["completion"] = completions[completion_idx]
-            new_row["completion"] = "def" + new_row["completion"] if "def" not in new_row["completion"] else new_row["completion"]
             expanded_data.append(new_row)
     
     expanded_dataset = pd.DataFrame(expanded_data)
@@ -196,39 +205,8 @@ if __name__ == "__main__":
     expanded_dataset = expanded_dataset.reset_index(drop=True)
     expanded_dataset.to_json(os.path.join(args.save_dir, "mbpp_completion.json"), orient='records', indent=2)
     
-    # Calculate pass@k metrics
+    # Calculate pass@k metrics by reusing the original evaluate function
     from collections import defaultdict
-    task_results = defaultdict(list)
-    
-    for i, example in enumerate(expanded_dataset.to_dict(orient="records")):
-        original_task_id = int(example["task_id"].split("_")[0]) if isinstance(example["task_id"], str) else example.get("task_id", i // args.num_samples_per_task)
-        completion = example["completion"]
-        
-        # Test the completion
-        is_correct = False
-        try:
-            code = completion.split("\n")
-            code_ = []
-            for c in code:
-                if len(c.lstrip()) == len(c) and not c.startswith("def"):
-                    continue
-                code_.append(c)
-            code = "\n".join(code_)
-            
-            function = code
-            test_cases = "\n".join(example["test_list"]).replace("\/", "/")
-            test_run = "\n".join([function, test_cases])
-            
-            exec_helper(function)
-            exec_helper(test_cases)
-            exec_helper(test_run)
-            is_correct = True
-        except:
-            is_correct = False
-        
-        task_results[original_task_id].append(is_correct)
-    
-    # Calculate pass@k for different k values
     import numpy as np
     from math import comb
     
@@ -237,22 +215,46 @@ if __name__ == "__main__":
             return 1.0
         return 1.0 - comb(n - c, k) / comb(n, k)
     
+    # Group results by original task id
+    task_groups = defaultdict(list)
+    for i, row in expanded_dataset.iterrows():
+        original_task_id = int(row["task_id"].split("_")[0]) if isinstance(row["task_id"], str) else i // args.num_samples_per_task
+        task_groups[original_task_id].append(row)
+    
+    # Calculate metrics for each task using the original evaluate function
+    task_results = {}
+    for task_id, task_rows in task_groups.items():
+        task_df = pd.DataFrame(task_rows).reset_index(drop=True)
+        
+        # Use the original evaluate function to get detailed metrics
+        accuracy, exec_error, format_error = evaluate(task_df)
+        
+        # Calculate number of correct solutions for this task
+        correct_count = int(len(task_df) * accuracy / 100)
+        task_results[task_id] = {
+            'total': len(task_df),
+            'correct': correct_count,
+            'accuracy': accuracy,
+            'exec_error': exec_error,
+            'format_error': format_error
+        }
+    
+    # Calculate pass@k for different k values
     k_values = list(range(1, min(args.num_samples_per_task + 1, 11)))
     pass_at_k_results = {}
     
     for k in k_values:
         pass_at_k_scores = []
         for task_id, results in task_results.items():
-            n = len(results)
-            c = sum(results)
+            n = results['total']
+            c = results['correct']
             if n >= k:
                 pass_at_k_scores.append(estimate_pass_at_k(n, c, k))
         
         if pass_at_k_scores:
             pass_at_k_results[f"pass@{k}"] = np.mean(pass_at_k_scores)
     
-    # Calculate legacy metrics using the same methodology as pass@1 
-    # Extract first sample for each task to match pass@1 calculation
+    # Calculate legacy metrics using first sample from each task
     first_samples = []
     for task_id in range(len(dataset)):
         first_sample_idx = task_id * args.num_samples_per_task
@@ -260,20 +262,29 @@ if __name__ == "__main__":
             first_samples.append(expanded_dataset.iloc[first_sample_idx])
     
     first_samples_df = pd.DataFrame(first_samples).reset_index(drop=True)
-    accuracy, exec_error, format_error = evaluate(first_samples_df)
+    print(first_samples_df)
+    legacy_accuracy, legacy_exec_error, legacy_format_error = evaluate(first_samples_df)
     
     # Print results
     print("Legacy metrics (using first sample):")
-    print({"accuracy": accuracy, "exec_error": exec_error, "format_error": format_error})
+    print({"accuracy": legacy_accuracy, "exec_error": legacy_exec_error, "format_error": legacy_format_error})
     print("\npass@k results:")
     print(pass_at_k_results)
+    
+    # # Print detailed per-task results for debugging
+    # print("\nPer-task results summary:")
+    # for task_id, results in task_results.items():
+    #     print(f"Task {task_id}: {results['correct']}/{results['total']} correct ({results['accuracy']:.1f}%)")
     
     # Save results
     with open(os.path.join(args.save_dir, "result.txt"), "w") as f:
         print("Legacy metrics:", file=f)
-        print({"accuracy": accuracy, "exec_error": exec_error, "format_error": format_error}, file=f)
+        print({"accuracy": legacy_accuracy, "exec_error": legacy_exec_error, "format_error": legacy_format_error}, file=f)
         print("\npass@k results:", file=f)
         print(pass_at_k_results, file=f)
+        print("\nPer-task results:", file=f)
+        for task_id, results in sorted(task_results.items()):
+            print(f"Task {task_id}: {results}", file=f)
     
     # Save pass@k results for curve plotting
     import json
