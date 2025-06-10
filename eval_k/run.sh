@@ -62,7 +62,8 @@ echo
 
 
 # Specify the test data set
-my_array=(humaneval mbpp leetcode math500 amc aime qwen livecodebench boxnet)
+# my_array=(humaneval mbpp leetcode math500 amc aime)
+my_array=(boxnet)  # Only test Qwen Math for now
 
 
 
@@ -78,7 +79,7 @@ if [[ " ${my_array[@]} " =~ " humaneval " ]]; then
         --temperature $TEMPERATURE \
         --seed $SEED \
         $([ "$TEST_MODE" = true ] && echo "--test")
-        
+
 fi
 
 if [[ " ${my_array[@]} " =~ " mbpp " ]]; then
@@ -168,7 +169,7 @@ if [[ " ${my_array[@]} " =~ " qwen " ]]; then
     PROMPT_TYPE="qwen25-math-cot"
     MODEL_NAME_OR_PATH=$MODEL_CKPT
     mkdir -p $OUTPUT_DIR/qwen_math
-    bash sh/eval.sh $PROMPT_TYPE $MODEL_NAME_OR_PATH $OUTPUT_DIR/qwen_math
+    bash sh/eval.sh $PROMPT_TYPE $MODEL_NAME_OR_PATH $OUTPUT_DIR/qwen_math $TEST_MODE $TEMPERATURE $SEED
     cd ../../../
 fi
 

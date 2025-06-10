@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 from pebble import ProcessPool
 from concurrent.futures import TimeoutError
+from math import comb
 
 from grader import *
 
@@ -70,12 +71,34 @@ def evaluate(data_name, prompt_type, samples: list=None, file_path: str=None, ma
     col_means= np.array(score_mat).mean(axis=0)
     mean_score = list(np.round(col_means * 100, decimals=1))
 
+    # Calculate pass@k metrics
+    def estimate_pass_at_k(n, c, k):
+        if n - c < k:
+            return 1.0
+        return 1.0 - comb(n - c, k) / comb(n, k)
+    
+    # Calculate pass@k for different k values
+    max_k = max([len(s) for s in score_mat])
+    pass_at_k_results = {}
+    
+    for k in range(1, min(max_k + 1, 11)):  # Calculate up to pass@10
+        pass_at_k_scores = []
+        for scores in score_mat:
+            n = len(scores)
+            c = sum(scores)  # Number of correct solutions
+            if n >= k:
+                pass_at_k_scores.append(estimate_pass_at_k(n, c, k))
+        
+        if pass_at_k_scores:
+            pass_at_k_results[f"pass@{k}"] = round(np.mean(pass_at_k_scores) * 100, 1)
+
     result_json = {
         "num_samples": len(samples),
         "num_scores": len(scores),
         "timeout_samples": timeout_cnt,
         "empty_samples": len([s for s in samples if not s['pred'][-1]]),
-        "acc": mean_score[0]
+        "acc": mean_score[0],
+        "pass_at_k": pass_at_k_results
     }
 
     # each type score

@@ -3,9 +3,20 @@ set -ex
 PROMPT_TYPE=$1
 MODEL_NAME_OR_PATH=$2
 OUTPUT_DIR=$3
+TEST_MODE=$4
+TEMPERATURE=${5:-0.8}  # Default to 0.8 if not provided
+SEED=${6:-42}          # Default to 42 if not provided
 
 SPLIT="test"
-NUM_TEST_SAMPLE=-1
+# Set NUM_TEST_SAMPLE and N_SAMPLING based on test mode
+if [ "$TEST_MODE" = "true" ]; then
+    NUM_TEST_SAMPLE=10
+    N_SAMPLING=10
+    echo "Test mode: Evaluating only first 10 problems with 10 samples each"
+else
+    NUM_TEST_SAMPLE=-1
+    N_SAMPLING=10
+fi
 
 # English open datasets
 DATA_NAME="minerva_math,olympiadbench"
@@ -17,9 +28,9 @@ python3 -u math_eval.py \
     --split ${SPLIT} \
     --prompt_type ${PROMPT_TYPE} \
     --num_test_sample ${NUM_TEST_SAMPLE} \
-    --seed 0 \
-    --temperature 0 \
-    --n_sampling 1 \
+    --seed ${SEED} \
+    --temperature ${TEMPERATURE} \
+    --n_sampling ${N_SAMPLING} \
     --top_p 1 \
     --start 0 \
     --end -1 \

@@ -161,8 +161,31 @@ def make_conv_hf(question, tokenizer):
     return chat
 
 
+def load_aime_datasets():
+    """Load AIME datasets including AIME 2025"""
+    try:
+        # Load the combined validation dataset (now includes AIME 2025)
+        validation_data = read_jsonl_file("data/AI-MO/aimo-validation-aime/aimo-validation-aime.jsonl")
+        print(f"Loaded {len(validation_data)} problems from combined dataset")
+        
+        # Count by source for information
+        sources = {}
+        for item in validation_data:
+            source = item.get('source', 'original')
+            sources[source] = sources.get(source, 0) + 1
+        
+        print("Dataset composition:")
+        for source, count in sources.items():
+            print(f"  {source}: {count} problems")
+        
+        return validation_data
+        
+    except Exception as e:
+        print(f"Could not load dataset: {e}")
+        return []
+
 def run(args, max=-1):
-    all_problems = read_jsonl_file(os.path.join(args.data_dir, "aimo-validation-aime.jsonl"))
+    all_problems = load_aime_datasets()
     
     # Apply test mode limitation
     if args.test:
@@ -245,10 +268,13 @@ def run(args, max=-1):
         if line["success"]:
             dic[line["url"].split("/")[-2]]["success"] += 1
     print(json.dumps(dic, indent=4))
+    # Calculate 2024 AIME results if both parts exist
     aime2024_total = 30
-    aime2024_success = dic["2024_AIME_II_Problems"]["success"] + dic["2024_AIME_I_Problems"]["success"]
-    print("##########AIME2024")
-    print(f"total: {aime2024_total}, success: {aime2024_success}, rate: {aime2024_success / aime2024_total}")
+    aime2024_success = 0
+    if "2024_AIME_I_Problems" in dic and "2024_AIME_II_Problems" in dic:
+        aime2024_success = dic["2024_AIME_II_Problems"]["success"] + dic["2024_AIME_I_Problems"]["success"]
+        print("##########AIME2024")
+        print(f"total: {aime2024_total}, success: {aime2024_success}, rate: {aime2024_success / aime2024_total}")
     
     # Calculate pass@k metrics
     k_values = list(range(1, args.num_samples_per_task + 1))

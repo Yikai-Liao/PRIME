@@ -115,7 +115,7 @@ expanded_data = []
 for i, row in problems.iterrows():
     for j in range(args.num_samples_per_task):
         completion_idx = i * args.num_samples_per_task + j
-        new_row = row.copy()
+        new_row = row.to_dict()
         new_row["task_id"] = f"{row.get('task_id', i)}_{j}"
         new_row["output"] = completions[completion_idx]
         new_row["raw_output"] = raw_outputs[completion_idx]

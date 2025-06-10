@@ -144,7 +144,7 @@ def generate_sample_batch(question_list):
             })
     return completions
 
-def evaluate_boxnet_correctness(samples, dataset):
+def evaluate_boxnet_correctness(samples, data):
     """Evaluate correctness using reasoning_gym's score_answer method"""
     results = {}
     task_results = {}
@@ -160,10 +160,12 @@ def evaluate_boxnet_correctness(samples, dataset):
         
         try:
             if json_answer is not None:
-                # Use reasoning_gym's score_answer method
-                score = dataset.score_answer(answer=json_answer, entry=entry)
-                # Binarize reward: only keep score == 1, others set to 0
-                reward = 1.0 if score == 1.0 else 0.0
+                # Convert json_answer to string for reasoning_gym's score_answer method
+                answer_str = json.dumps(json_answer) if isinstance(json_answer, (list, dict)) else str(json_answer)
+                score = data.score_answer(answer=answer_str, entry=entry)
+                # Use the continuous score (matches boxes matched / total boxes)
+                # Score of 1.0 means all boxes matched, 0.33 means 1/3 boxes matched, etc.
+                reward = score
             else:
                 reward = 0.0
             
@@ -179,10 +181,21 @@ def evaluate_boxnet_correctness(samples, dataset):
         correct = 0
         for task_id, rewards in task_results.items():
             total += 1
-            # Pass@k: at least one of the first k attempts is correct
-            if any(rewards[:k]):
+            # Pass@k: at least one of the first k attempts has score >= 1.0 (perfect solution)
+            if any(reward >= 1.0 for reward in rewards[:k]):
                 correct += 1
         results[f"pass@{k}"] = correct / total if total > 0 else 0.0
+    
+    # Also calculate partial success rates (score >= 0.5, meaning at least half boxes matched)
+    for k in k_values:
+        total = 0
+        correct = 0
+        for task_id, rewards in task_results.items():
+            total += 1
+            # Partial success: at least one of the first k attempts has score >= 0.5
+            if any(reward >= 0.5 for reward in rewards[:k]):
+                correct += 1
+        results[f"partial_pass@{k}"] = correct / total if total > 0 else 0.0
     
     return results
 
@@ -195,19 +208,31 @@ problems_dataset = problems_dataset.map(
     load_from_cache_file=False
 )
 
-completions = generate_sample_batch(problems_dataset["instruction"])
-
+# completions = generate_sample_batch(problems_dataset["instruction"])
+import pickle
+# Save completions for debugging
+# with open(os.path.join(args.save_dir, "completions.pkl"), "wb") as f:
+#     pickle.dump(completions, f)
+# print(f"Saved completions to {os.path.join(args.save_dir, 'completions.pkl')}")
 # Create samples for each completion of each problem
+with open(os.path.join(args.save_dir, "completions.pkl"), "rb") as f:
+    completions = pickle.load(f)
+
 for i, problem in enumerate(problems_dataset):
     for j in range(args.num_samples_per_task):
         completion_idx = i * args.num_samples_per_task + j
+        if completion_idx >= len(completions):
+            print(f"Warning: completion_idx {completion_idx} exceeds completions length {len(completions)}")
+            break
         completion = completions[completion_idx]
+        # Use the original entry from the data source, not the processed one
+        original_entry = data[i]  # Use original entry from reasoning_gym
         sample = {
             "task_id": problem["task_id"],
             "question": problem["question"],
             "answer": problem["answer"],
             "metadata": problem["metadata"],
-            "entry": problem["entry"],
+            "entry": original_entry,
             "raw_output": completion["raw_output"],
             "json_answer": completion["json_answer"]
         }

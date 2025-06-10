@@ -221,10 +221,8 @@ def main(llm, tokenizer, data_name, args):
                 sample[key] = example[key]
         samples.append(sample)
 
-    # repeat n times
-    input_prompts = [
-        sample["prompt"] for sample in samples for _ in range(args.n_sampling)
-    ]
+    # Generate prompts without repeating (will use n parameter instead)
+    input_prompts = [sample["prompt"] for sample in samples]
     # system_prompt = "When tackling complex reasoning tasks, you have access to the following actions. Use them as needed to progress through your thought process. After each action, determine and state the next most appropriate action to take.\n\nActions:\n\n[ASSESS]: Analyze the current state of the problem. Identify key elements, constraints, and objectives. Understand where you are in the reasoning process.\n\n[ADVANCE]: Take a step forward in your reasoning. This could involve making a calculation, drawing a conclusion, or forming a hypothesis based on available information.\n\n[VERIFY]: Check the validity and accuracy of your current approach or recent conclusion. Look for potential errors or inconsistencies in your reasoning. Evaluate your process so far, considering what's working well and what could be improved in your approach.\n\n[SIMPLIFY]: Break down a complex step or concept into simpler, more manageable parts. Explain each part clearly.\n\n[SYNTHESIZE]: Combine multiple pieces of information or conclusions to form a more comprehensive understanding or solution.\n\n[PIVOT]: Change your approach if the current one isn't yielding results. Explain why you're changing course and outline the new strategy.\n\n[OUTPUT]: Summarize the above thought process and present your final response concisely and completely.\n\nYour action should contain multiple steps, and each step starts with #. After each action (except OUTPUT), state which action you will take next with ''Next action: [Your action]''. Continue this process until you reach a satisfactory conclusion or solution to the problem at hand, at which point you should use the [OUTPUT] action. The thought process is completely invisible to user, so [OUTPUT] should be a complete response. You should strictly follow the format below:\n\n[ACTION NAME]\n\n# Your action step 1\n\n# Your action step 2\n\n# Your action step 3\n\n...\n\nNext action: [NEXT ACTION NAME]\n\n\nNow, begin with the [ASSESS] action for the following task:\n"
     # system_prompt = "Solve the problem step by step."
     # system_prompt = "When tackling complex reasoning tasks, you have access to the following actions. Use them as needed to progress through your thought process.\n\n[ASSESS]\n\n[ADVANCE]\n\n[VERIFY]\n\n[SIMPLIFY]\n\n[SYNTHESIZE]\n\n[PIVOT]\n\n[OUTPUT]\n\nYou should strictly follow the format below:\n\n[ACTION NAME]\n\n# Your action step 1\n\n# Your action step 2\n\n# Your action step 3\n\n...\n\nNext action: [NEXT ACTION NAME]\n"
@@ -281,7 +279,7 @@ def main(llm, tokenizer, data_name, args):
                     temperature=args.temperature,
                     top_p=args.top_p,
                     max_tokens=args.max_tokens_per_call,
-                    n=1,
+                    n=args.n_sampling,
                     stop=stop_words,
                     stop_token_ids=(
                         [151645, 151643]
@@ -294,7 +292,12 @@ def main(llm, tokenizer, data_name, args):
             outputs = sorted(
                 outputs, key=lambda x: int(x.request_id)
             )  # sort outputs by request_id
-            outputs = [output.outputs[0].text for output in outputs]
+            # Flatten outputs to handle multiple samples per prompt
+            flattened_outputs = []
+            for output in outputs:
+                for sample_output in output.outputs:
+                    flattened_outputs.append(sample_output.text)
+            outputs = flattened_outputs
         else:
             outputs = generate_completions(
                 model=llm,
@@ -305,27 +308,32 @@ def main(llm, tokenizer, data_name, args):
                 stop_id_sequences=stop_words,
             )
 
-        assert len(outputs) == len(current_prompts)
+        assert len(outputs) == len(current_prompts) * args.n_sampling
 
         # process all outputs
         remain_prompts = []
         remain_codes = []
-        for (i, query), output in zip(current_prompts, outputs):
-            output = output.rstrip()
-            query += output
-            if args.prompt_type == "pal":
-                remain_prompts.append((i, query))
-                if "```python" in output:
-                    output = extract_program(query)
-                remain_codes.append(output)
-            elif args.prompt_type == "cot":
-                end_prompts.append((i, query))
-            elif "boxed" not in output and output.endswith("```"):
-                program = extract_program(query)
-                remain_prompts.append((i, query))
-                remain_codes.append(program)
-            else:
-                end_prompts.append((i, query))
+        output_idx = 0
+        for i, query in current_prompts:
+            for sample_idx in range(args.n_sampling):
+                output = outputs[output_idx].rstrip()
+                sample_query = query + output
+                sample_id = i * args.n_sampling + sample_idx
+                
+                if args.prompt_type == "pal":
+                    remain_prompts.append((sample_id, sample_query))
+                    if "```python" in output:
+                        output = extract_program(sample_query)
+                    remain_codes.append(output)
+                elif args.prompt_type == "cot":
+                    end_prompts.append((sample_id, sample_query))
+                elif "boxed" not in output and output.endswith("```"):
+                    program = extract_program(sample_query)
+                    remain_prompts.append((sample_id, sample_query))
+                    remain_codes.append(program)
+                else:
+                    end_prompts.append((sample_id, sample_query))
+                output_idx += 1
 
         # execute the remain prompts
         remain_results = executor.batch_apply(remain_codes)
@@ -350,10 +358,13 @@ def main(llm, tokenizer, data_name, args):
 
     # remove input_prompt from end_prompt
     codes = []
-    assert len(input_prompts) == len(end_prompts)
-    for i in range(len(input_prompts)):
+    assert len(input_prompts) * args.n_sampling == len(end_prompts)
+    for i in range(len(end_prompts)):
         _, end_prompt = end_prompts[i]
-        code = end_prompt.split(input_prompts[i])[-1].strip()
+        # Find which original prompt this belongs to
+        original_prompt_idx = i // args.n_sampling
+        original_prompt = input_prompts[original_prompt_idx]
+        code = end_prompt.split(original_prompt)[-1].strip()
         for stop_word in stop_words:
             if stop_word in code:
                 code = code.split(stop_word)[0].strip()
