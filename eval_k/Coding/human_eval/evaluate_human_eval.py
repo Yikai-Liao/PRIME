@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--model", type=str, default="")
 parser.add_argument("--save_dir", type=str)
 parser.add_argument("--data_dir", type=str)
-parser.add_argument("--num-samples-per-task", type=int, default=1)
+parser.add_argument("--num-samples-per-task", type=int, default=10)
 parser.add_argument("--temperature", type=float, default=0.0)
 args = parser.parse_args()
 data_path = os.path.join(args.data_dir, "HumanEval.jsonl.gz")
@@ -92,12 +92,15 @@ def generate_sample_batch(question_list):
     )
     sampling_params = SamplingParams(max_tokens=4096,
                                     temperature=args.temperature,
-                                    # n=1,
+                                    n=args.num_samples_per_task,
                                     stop=["<|eot_id|>","<|im_end|>"],)
     
     outputs = llm.generate(question_list, sampling_params, use_tqdm=True)
 
-    completions = [match_code(output.outputs[0].text) for output in outputs]
+    completions = []
+    for output in outputs:
+        for i in range(args.num_samples_per_task):
+            completions.append(match_code(output.outputs[i].text))
     return completions
 
 def make_signature(example):
@@ -107,14 +110,26 @@ def make_signature(example):
     return signature
 
 samples = []
-problems = Dataset.from_pandas(pd.DataFrame(problems).T)
-problems = problems.map(lambda x: {"signature": make_signature(x)}, cache_file_name="cache/human_eval", load_from_cache_file=False)
-problems = problems.map(lambda x: {"instruction": make_conv_hf(x, tokenizer)}, cache_file_name="cache/human_eval", load_from_cache_file=False)
+problems_df = pd.DataFrame(problems).T
+problems_dataset = Dataset.from_pandas(problems_df)
+problems_dataset = problems_dataset.map(lambda x: {"signature": make_signature(x)}, cache_file_name="cache/human_eval", load_from_cache_file=False)
+problems_dataset = problems_dataset.map(lambda x: {"instruction": make_conv_hf(x, tokenizer)}, cache_file_name="cache/human_eval", load_from_cache_file=False)
 
-completions = generate_sample_batch(problems["instruction"])
-problems = problems.add_column("completion", completions)
-problems = problems.map(lambda x: {"completion": x["prompt"] + x["completion"]})
-samples = problems.to_pandas().to_dict(orient="records")
+completions = generate_sample_batch(problems_dataset["instruction"])
+
+# Create samples for each completion of each problem
+for i, problem in enumerate(problems_dataset):
+    for j in range(args.num_samples_per_task):
+        completion_idx = i * args.num_samples_per_task + j
+        sample = {
+            "task_id": problem["task_id"],
+            "prompt": problem["prompt"],
+            "canonical_solution": problem["canonical_solution"],
+            "test": problem["test"],
+            "entry_point": problem["entry_point"],
+            "completion": problem["prompt"] + completions[completion_idx]
+        }
+        samples.append(sample)
 
 output_filepath = os.path.join(args.save_dir, "samples.jsonl")
 if not os.path.exists(args.save_dir):
@@ -123,8 +138,17 @@ if not os.path.exists(os.path.join(args.save_dir)):
     os.mkdir(os.path.join(args.save_dir))
 write_jsonl(output_filepath, samples)
 
-score = evaluate_functional_correctness(sample_file=output_filepath)
+k_values = list(range(1, min(args.num_samples_per_task + 1, 11)))  # k from 1 to min(n, 10)
+score = evaluate_functional_correctness(sample_file=output_filepath, k=k_values)
 print(score)
+
+# Save detailed results
 score_path = os.path.join(args.save_dir, "result.txt")
 with open(score_path, "w") as f:
     f.write(str(score))
+
+# Save pass@k results for curve plotting
+import json
+pass_at_k_path = os.path.join(args.save_dir, "pass_at_k.json")
+with open(pass_at_k_path, "w") as f:
+    json.dump(score, f, indent=2)

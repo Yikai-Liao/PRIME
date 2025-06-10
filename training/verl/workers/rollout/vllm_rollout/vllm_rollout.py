@@ -176,7 +176,7 @@ class vLLMRollout(BaseRollout):
                 prompts=None,  # because we have already convert it to prompt token id
                 sampling_params=self.sampling_params,
                 prompt_token_ids=idx_list,
-                use_tqdm=False)
+                use_tqdm=True)
 
         response = output[0].to(idx.device)  # (bs, response_length)
         log_probs = output[1].to(idx.device)  # (bs, response_length)

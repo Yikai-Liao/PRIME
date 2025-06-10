@@ -1,15 +1,24 @@
 #!/bin/bash
 source /environment/miniconda3/etc/profile.d/conda.sh   # set to your path
 MODEL_CKPT=$1
+NUM_SAMPLES=${2:-10}  # Number of samples per task (default: 10)
+TEMPERATURE=${3:-0.8}  # Temperature for sampling (default: 0.8)
 MODEL_NAME=$(basename "$MODEL_CKPT")
 OUTPUT_DIR="results/$MODEL_NAME" # output dir
 mkdir -p $OUTPUT_DIR
 
+echo "Running evaluations with:"
+echo "  Model: $MODEL_CKPT"
+echo "  Samples per task: $NUM_SAMPLES"
+echo "  Temperature: $TEMPERATURE"
+echo "  Output directory: $OUTPUT_DIR"
+echo
+
 
 # Specify the test data set
-# my_array=(mbpp leetcode math500 amc aime qwen livecodebench)
+my_array=(mbpp leetcode math500 amc aime qwen livecodebench)
 
-my_array=(qwen)
+
 
 if [[ " ${my_array[@]} " =~ " humaneval " ]]; then
     conda activate prime
@@ -18,7 +27,9 @@ if [[ " ${my_array[@]} " =~ " humaneval " ]]; then
     python3 Coding/human_eval/evaluate_human_eval.py \
         --model $MODEL_CKPT \
         --data_dir data/humaneval \
-        --save_dir $OUTPUT_DIR/human_eval_chat 
+        --save_dir $OUTPUT_DIR/human_eval_chat \
+        --num-samples-per-task $NUM_SAMPLES \
+        
 fi
 
 if [[ " ${my_array[@]} " =~ " mbpp " ]]; then
@@ -28,7 +39,9 @@ if [[ " ${my_array[@]} " =~ " mbpp " ]]; then
     python3 -u Coding/mbpp/evaluate_mbpp.py \
         --model $MODEL_CKPT \
         --input_data data/mbpp/new_mbpp.json \
-        --save_dir $OUTPUT_DIR/mbpp_chat
+        --save_dir $OUTPUT_DIR/mbpp_chat \
+        --num-samples-per-task $NUM_SAMPLES \
+
 fi
 
 
@@ -39,7 +52,9 @@ if [[ " ${my_array[@]} " =~ " leetcode " ]]; then
     python3 Coding/leetcode/evaluate_leetcode.py \
         --model $MODEL_CKPT \
         --input_data data/leetcode/leetcode-test.json \
-        --save_dir $OUTPUT_DIR/leetcode_chat
+        --save_dir $OUTPUT_DIR/leetcode_chat \
+        --num-samples-per-task $NUM_SAMPLES \
+
 fi
 
 
@@ -50,7 +65,9 @@ if [[ " ${my_array[@]} " =~ " amc " ]]; then
     python3 -u Math/amc/evaluate_amc.py \
         --model $MODEL_CKPT \
         --data_dir  data/AI-MO/aimo-validation-amc \
-        --save_dir $OUTPUT_DIR/amc_chat
+        --save_dir $OUTPUT_DIR/amc_chat \
+        --num-samples-per-task $NUM_SAMPLES \
+
 fi
 
 if [[ " ${my_array[@]} " =~ " aime " ]]; then
@@ -61,7 +78,9 @@ if [[ " ${my_array[@]} " =~ " aime " ]]; then
     python3 -u Math/aime/evaluate_aime.py \
         --model $MODEL_CKPT \
         --data_dir  data/AI-MO/aimo-validation-aime \
-        --save_dir $OUTPUT_DIR/aime_chat
+        --save_dir $OUTPUT_DIR/aime_chat \
+        --num-samples-per-task $NUM_SAMPLES \
+
 fi
 
 
@@ -73,7 +92,9 @@ if [[ " ${my_array[@]} " =~ " math500 " ]]; then
     python3 -u Math/math/evaluate_math.py \
         --model $MODEL_CKPT \
         --data_dir data/math500 \
-        --save_dir $OUTPUT_DIR/math_chat 
+        --save_dir $OUTPUT_DIR/math_chat \
+        --num-samples-per-task $NUM_SAMPLES \
+        
 fi
 
 if [[ " ${my_array[@]} " =~ " qwen " ]]; then
@@ -105,10 +126,12 @@ if [[ " ${my_array[@]} " =~ " livecodebench " ]]; then
     cd ../../../
 fi
 
+echo "Evaluation completed. Results saved to: $OUTPUT_DIR"
+echo "Pass@k results are available in pass_at_k.json files within each subdirectory."
+echo "To plot pass@k curves, use: python utils/plot_pass_at_k.py --results_file <path_to_pass_at_k.json> --output_dir <plot_dir>"
 
-
-
-
-
-
-
+# Usage examples:
+# ./run.sh /path/to/model                    # Use default: 10 samples, temperature 0.8
+# ./run.sh /path/to/model 20                 # Use 20 samples, temperature 0.8
+# ./run.sh /path/to/model 10 0.0             # Use 10 samples, temperature 0.0 (deterministic)
+# ./run.sh /path/to/model 5 1.0              # Use 5 samples, temperature 1.0 (high diversity)
