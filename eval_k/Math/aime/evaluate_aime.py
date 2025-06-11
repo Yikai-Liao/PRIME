@@ -12,6 +12,7 @@ import operator
 import json
 import tqdm
 import pandas as pd
+import pickle
 from utils.util import clean_numbers, last_boxed_only, last_boxed_only_string
 from utils.math_equivalence import is_equiv
 from utils.grader import math_equal
@@ -40,14 +41,25 @@ def write_jsonl_file(file_path, data):
             f.write(json.dumps(line, ensure_ascii=False) + '\n')
 
 def generate_sample_batch(question_list):
+    # Check if raw completions pickle file exists
+    raw_completions_file = os.path.join(args.save_dir, "raw_completions.pkl")
+    if os.path.exists(raw_completions_file):
+        print(f"Loading raw completions from {raw_completions_file}")
+        with open(raw_completions_file, 'rb') as f:
+            return pickle.load(f)
+    
+    print("Generating new completions with vLLM...")
     llm = LLM(
         model=args.model,
         trust_remote_code=True,
-        tensor_parallel_size=torch.cuda.device_count(),
-        gpu_memory_utilization=0.80,
+        tensor_parallel_size=1,  # Use single GPU to avoid memory issues
+        gpu_memory_utilization=0.95,  # Increase GPU memory utilization
         seed=args.seed,
+        enforce_eager=True,  # Enable eager mode to avoid CUDA graphs
+        enable_chunked_prefill=False,  # Disable chunked prefill
+        max_model_len=18384,  # Set max model length to 18k
     )
-    sampling_params = SamplingParams(max_tokens=32768,
+    sampling_params = SamplingParams(max_tokens=16384,
                                      temperature=args.temperature,
                                      n=args.num_samples_per_task,
                                      stop=["\n###\nProblem: ", "<|eot_id|>"], 
@@ -57,6 +69,12 @@ def generate_sample_batch(question_list):
     for output in outputs:
         for i in range(args.num_samples_per_task):
             completions.append(output.outputs[i].text)
+    
+    # Save raw completions to pickle file
+    print(f"Saving raw completions to {raw_completions_file}")
+    with open(raw_completions_file, 'wb') as f:
+        pickle.dump(completions, f)
+    
     return completions
 
 
@@ -256,7 +274,9 @@ def run(args, max=-1):
     print(f"total: {total}, success: {correct}, rate: {correct / total}")
     comp_name = []
     for line in save_data:
-        comp_name.append(line["url"].split("/")[-2])
+        # Handle missing url field gracefully
+        url = line.get("url", "unknown/unknown")
+        comp_name.append(url.split("/")[-2])
     comp_name = list(set(comp_name))
     dic = {}
     for line in comp_name:
@@ -264,9 +284,11 @@ def run(args, max=-1):
         dic[line]["total"] = 0
         dic[line]["success"] = 0
     for line in save_data:
-        dic[line["url"].split("/")[-2]]["total"] += 1
+        url = line.get("url", "unknown/unknown")
+        comp_name_key = url.split("/")[-2]
+        dic[comp_name_key]["total"] += 1
         if line["success"]:
-            dic[line["url"].split("/")[-2]]["success"] += 1
+            dic[comp_name_key]["success"] += 1
     print(json.dumps(dic, indent=4))
     # Calculate 2024 AIME results if both parts exist
     aime2024_total = 30

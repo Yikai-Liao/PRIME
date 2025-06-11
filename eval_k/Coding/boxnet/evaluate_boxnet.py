@@ -160,8 +160,23 @@ def evaluate_boxnet_correctness(samples, data):
         
         try:
             if json_answer is not None:
-                # Convert json_answer to string for reasoning_gym's score_answer method
-                answer_str = json.dumps(json_answer) if isinstance(json_answer, (list, dict)) else str(json_answer)
+                # Handle malformed JSON answers - convert {'Agent': 'Agent[x,y]', 'action': 'move(...)'} 
+                # format to the expected {'Agent[x,y]': 'move(...)'} format
+                normalized_answer = json_answer
+                if isinstance(json_answer, list):
+                    normalized_list = []
+                    for item in json_answer:
+                        if isinstance(item, dict) and 'Agent' in item and 'action' in item:
+                            # Convert malformed format to expected format
+                            agent_key = item['Agent']
+                            action_value = item['action']
+                            normalized_list.append({agent_key: action_value})
+                        else:
+                            normalized_list.append(item)
+                    normalized_answer = normalized_list
+                
+                # Convert to string for reasoning_gym's score_answer method
+                answer_str = json.dumps(normalized_answer) if isinstance(normalized_answer, (list, dict)) else str(normalized_answer)
                 score = data.score_answer(answer=answer_str, entry=entry)
                 # Use the continuous score (matches boxes matched / total boxes)
                 # Score of 1.0 means all boxes matched, 0.33 means 1/3 boxes matched, etc.

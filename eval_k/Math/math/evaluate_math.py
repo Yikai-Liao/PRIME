@@ -19,6 +19,7 @@ import torch
 import re
 import math
 from transformers import AutoTokenizer
+import pickle
 
 os.environ["NCCL_IGNORE_DISABLED_P2P"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
@@ -42,10 +43,13 @@ def generate_sample_batch(question_list):
         model=args.model,
         trust_remote_code=True,
         tensor_parallel_size=torch.cuda.device_count(),
-        gpu_memory_utilization=0.90,
+        gpu_memory_utilization=0.85,
         seed=args.seed,
+        enforce_eager=True,
+        swap_space=16,
+        max_model_len=18384,  # Set max model length to 18k
     )
-    sampling_params = SamplingParams(max_tokens=32768,
+    sampling_params = SamplingParams(max_tokens=16384,
                                     temperature=args.temperature,
                                     n=args.num_samples_per_task,
                                     stop=["\n###\nProblem: ", "<|eot_id|>"],

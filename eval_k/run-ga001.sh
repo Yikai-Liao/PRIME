@@ -63,8 +63,7 @@ echo
 
 # Specify the test data set
 # my_array=(humaneval mbpp leetcode math500 amc aime)
-my_array=(math500)  # Fix: Use aime instead of boxnet
-
+my_array=(aime)  # Fix: Use aime instead of boxnet
 
 
 
@@ -131,7 +130,7 @@ if [[ " ${my_array[@]} " =~ " amc " ]]; then
 fi
 
 if [[ " ${my_array[@]} " =~ " aime " ]]; then
-    conda activate prime2
+    conda activate prime
     # AIME2024 chat
     echo "running aime_chat(numina)"
     mkdir -p $OUTPUT_DIR/aime_chat
@@ -148,7 +147,7 @@ fi
 
 
 if [[ " ${my_array[@]} " =~ " math500 " ]]; then
-    conda activate prime2
+    conda activate prime
     # math chat
     echo "running math_chat 500"
     mkdir -p $OUTPUT_DIR/math_chat
